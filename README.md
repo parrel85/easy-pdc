@@ -4,7 +4,7 @@ Applicazione web per calcolare le perdite di carico di una linea idraulica dal s
 
 Funziona interamente nel browser: niente installazione, niente account, niente server. Si apre da PC, tablet e telefono.
 
-**Usala online:** https://TUONOME.github.io/perdite-di-carico/
+**Usala online:** https://parrel85.github.io/easy-pdc/
 
 ## Cosa calcola
 
