@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Perdite di carico linea</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: strumento a due colonne. A sinistra i dati (fluido, serbatoi, tratti), a destra schema e risultati sempre visibili. */
+:root{
+  --bg:#eef2f3; --surface:#ffffff; --sunken:#f6f8f9; --ink:#15232a; --muted:#566972; --line:#cfd9de;
+  --accent:#0d6681; --accent-ink:#ffffff; --accent-soft:#dcecf1; --liquid:#8ecbdd; --steel:#7d8f98;
+  --valve:#6b4fa3; --ok:#1c7a4b; --ok-soft:#dff2e7; --warn:#9a5600; --warn-soft:#fbecd3; --crit:#b3261e; --crit-soft:#fbe1de;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#0f171b; --surface:#172228; --sunken:#121b20; --ink:#e3ecef; --muted:#93a6af; --line:#2b3a42;
+  --accent:#62bcd8; --accent-ink:#06212b; --accent-soft:#143744; --liquid:#2c7890; --steel:#7f939c;
+  --valve:#b49be0; --ok:#62d09a; --ok-soft:#153a29; --warn:#f0b45c; --warn-soft:#3d2c10; --crit:#ff8d83; --crit-soft:#451b17;
+  color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0f171b; --surface:#172228; --sunken:#121b20; --ink:#e3ecef; --muted:#93a6af; --line:#2b3a42;
+  --accent:#62bcd8; --accent-ink:#06212b; --accent-soft:#143744; --liquid:#2c7890; --steel:#7f939c;
+  --valve:#b49be0; --ok:#62d09a; --ok-soft:#153a29; --warn:#f0b45c; --warn-soft:#3d2c10; --crit:#ff8d83; --crit-soft:#451b17;
+  color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;
+  padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-size:22px;font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:2px 0 0;max-width:62ch}
+h2{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.cols{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start}
+.left,.right{display:flex;flex-direction:column;gap:16px;min-width:0}
+.right{position:sticky;top:12px}
+@media (max-width:980px){ .cols{grid-template-columns:minmax(0,1fr)} .right{position:static;order:-1} }
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:620px){ .pair{grid-template-columns:minmax(0,1fr)} }
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
+.grid.tight{grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:8px}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+label.f span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+input,select,button{font:inherit;color:var(--ink)}
+input[type=number],input[type=text],select{width:100%;background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:0}
+input[type=number]{font-family:var(--mono);font-variant-numeric:tabular-nums}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.seg-toggle{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;align-self:flex-start;flex-wrap:wrap}
+.seg-toggle label{padding:6px 10px;cursor:pointer;font-size:13px;border-right:1px solid var(--line);background:var(--sunken)}
+.seg-toggle label:last-child{border-right:0}
+.seg-toggle input{position:absolute;opacity:0;pointer-events:none}
+.seg-toggle label:has(input:checked){background:var(--accent);color:var(--accent-ink);font-weight:600}
+.seg-toggle label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+button{background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.ghost{border-color:transparent;background:transparent;color:var(--muted);padding:4px 6px}
+button.ghost:hover{color:var(--crit)}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.props{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px}
+.props b{color:var(--ink);font-weight:500}
+/* tratti */
+.seg{border:1px solid var(--line);border-left:4px solid var(--steel);border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:10px;background:var(--surface)}
+.seg[data-side="asp"]{border-left-color:var(--liquid)}
+.seg[data-side="man"]{border-left-color:var(--accent)}
+.seg[data-kind="valve"]{border-left:6px double var(--valve)}
+.seg-kind{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--valve)}
+.seg-kind.pipe{color:var(--muted)}
+button.mv{padding:3px 8px;font-size:13px;line-height:1}
+.seg-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg-head input[type=text]{flex:1 1 150px;font-weight:600}
+.seg-head select{flex:0 1 150px}
+.seg-out{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-family:var(--mono);font-size:12px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
+.seg-out b{color:var(--ink);font-weight:600}
+.chip{font-family:var(--sans);font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px;white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)} .chip.warn{background:var(--warn-soft);color:var(--warn)} .chip.crit{background:var(--crit-soft);color:var(--crit)}
+.linkbtn{border:0;background:none;color:var(--accent);padding:0;text-decoration:underline;font-family:var(--sans);font-size:12px}
+details{border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+details[open] summary{margin-bottom:10px}
+/* risultati */
+.key{display:flex;flex-direction:column;gap:2px;border-radius:4px;padding:12px;background:var(--accent-soft)}
+.key .lab{font-size:12px;color:var(--muted)}
+.key .val{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.key .val small{font-size:14px;font-weight:500;color:var(--muted)}
+.key .alt{font-family:var(--mono);font-size:12px;color:var(--muted)}
+table.res{width:100%;border-collapse:collapse;font-size:13px}
+table.res td{padding:5px 0;border-bottom:1px solid var(--line);vertical-align:baseline}
+table.res td:last-child{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+table.res tr.sum td{font-weight:700;border-bottom:0;border-top:2px solid var(--ink)}
+table.res td small{color:var(--muted)}
+.msgs{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.msgs li{font-size:13px;border-radius:4px;padding:7px 10px}
+.msgs li.ok{background:var(--ok-soft);color:var(--ok)} .msgs li.warn{background:var(--warn-soft);color:var(--warn)} .msgs li.crit{background:var(--crit-soft);color:var(--crit)}
+.tablewrap{overflow-x:auto}
+table.det{border-collapse:collapse;width:100%;font-size:12px;min-width:640px}
+table.det th,table.det td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+table.det th{font-family:var(--sans);font-weight:600;color:var(--muted);font-size:11px}
+table.det th:first-child,table.det td:first-child{text-align:left;font-family:var(--sans)}
+table.det tfoot td{font-weight:700;border-top:2px solid var(--ink);border-bottom:0}
+svg text{font-family:var(--sans);font-size:12px;fill:var(--ink)}
+svg text.m{fill:var(--muted)} svg text.b{font-weight:600}
+.rowbtn{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.status{font-size:12px;color:var(--muted)}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.tab.empty{border-style:dashed;color:var(--muted)}
+textarea{width:100%;min-height:90px;background:var(--sunken);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:8px;font-family:var(--mono);font-size:11px;resize:vertical}
+button.danger{color:var(--crit)} button.danger.armed{background:var(--crit);color:var(--surface);border-color:var(--crit)}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Perdite di carico di una linea</h1>
+      <p class="sub">Dal serbatoio di partenza a quello di arrivo: perdite distribuite e concentrate, prevalenza richiesta alla pompa e NPSH disponibile.</p>
+    </div>
+    <div class="rowbtn">
+      <button id="btn-copy" type="button">Copia risultati</button>
+      <button id="btn-reset" type="button">Ripristina esempio</button>
+      <span class="status" id="status" role="status"></span>
+    </div>
+  </header>
+
+  <section class="panel" aria-labelledby="h-imp">
+    <h2 id="h-imp">Impianti salvati (massimo 5)</h2>
+    <div class="tabs" id="tabs"></div>
+    <div class="rowbtn">
+      <label class="f" style="flex:1 1 220px"><span>Nome dell'impianto selezionato</span><input type="text" id="plant-name" maxlength="40"></label>
+      <button id="btn-del" class="danger" type="button" style="align-self:flex-end">Elimina impianto</button>
+    </div>
+    <p class="hint">Ogni modifica viene salvata subito nell'impianto selezionato, in questo browser.</p>
+    <details id="xfer">
+      <summary>Portare gli impianti su un altro dispositivo</summary>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <p class="hint">Sul dispositivo di origine premi "Esporta" e copia il testo (o scarica il file). Sull'altro dispositivo incolla il testo qui sotto, oppure scegli il file, e premi "Importa". L'importazione sostituisce tutti gli impianti presenti.</p>
+        <textarea id="xfer-text" aria-label="Dati degli impianti" spellcheck="false"></textarea>
+        <div class="rowbtn">
+          <button id="btn-exp" type="button">Esporta</button>
+          <button id="btn-dl" type="button">Scarica file</button>
+          <button id="btn-imp" type="button">Importa</button>
+          <input type="file" id="imp-file" accept=".json,.txt,application/json" aria-label="File degli impianti" style="max-width:100%">
+        </div>
+        <p class="hint">"Scarica file" funziona quando l'applicazione è aperta come file o da un sito (per esempio GitHub Pages); dentro Claude usa il copia e incolla.</p>
+      </div>
+    </details>
+  </section>
+
+  <div class="cols">
+    <div class="left">
+      <section class="panel" aria-labelledby="h-fluido">
+        <h2 id="h-fluido">Fluido e portata</h2>
+        <div class="grid">
+          <label class="f" style="grid-column:span 2"><span>Fluido</span>
+            <select id="fluid-type" data-p="fluid.type">
+              <option value="acqua">Acqua</option>
+              <option value="etg">Acqua + glicole etilenico</option>
+              <option value="pg">Acqua + glicole propilenico</option>
+              <option value="custom">Personalizzato (liquami, digestato…)</option>
+            </select></label>
+          <label class="f" id="w-T"><span>Temperatura [°C]</span><input type="number" id="fluid-T" data-p="fluid.T" step="1" min="0" max="95"></label>
+          <label class="f" id="w-pct"><span>Glicole [% vol]</span><input type="number" id="fluid-pct" data-p="fluid.pct" step="5" min="0" max="50"></label>
+          <label class="f" id="w-rho"><span>Densità [kg/m³]</span><input type="number" id="fluid-rho" data-p="fluid.rho" step="1" min="1"></label>
+          <label class="f" id="w-mu"><span>Viscosità [mPa·s]</span><input type="number" id="fluid-mu" data-p="fluid.mu" step="0.1" min="0.01"></label>
+          <label class="f" id="w-pv"><span>Tensione di vapore [kPa]</span><input type="number" id="fluid-pv" data-p="fluid.pv" step="0.1" min="0"></label>
+          <label class="f"><span>Portata [m³/h]</span><input type="number" id="q" data-p="Q" step="0.5" min="0"></label>
+        </div>
+        <div class="props" id="props"></div>
+      </section>
+
+      <div class="pair">
+        <section class="panel" aria-labelledby="h-src">
+          <h2 id="h-src">Serbatoio di partenza</h2>
+          <div class="seg-toggle" role="radiogroup" aria-label="Tipo serbatoio di partenza">
+            <label><input type="radio" name="src-type" id="src-atm" value="atm" data-p="src.type">Atmosferico</label>
+            <label><input type="radio" name="src-type" id="src-pre" value="pre" data-p="src.type">In pressione</label>
+          </div>
+          <div class="grid">
+            <label class="f" id="w-src-p"><span>Pressione [bar relativi]</span><input type="number" id="src-p" data-p="src.p" step="0.1"></label>
+            <label class="f"><span>Quota pelo libero [m]</span><input type="number" id="src-z" data-p="src.z" step="0.1"></label>
+          </div>
+          <p class="hint">Pressione negativa = serbatoio in depressione.</p>
+        </section>
+        <section class="panel" aria-labelledby="h-dst">
+          <h2 id="h-dst">Arrivo</h2>
+          <div class="seg-toggle" role="radiogroup" aria-label="Tipo di arrivo">
+            <label><input type="radio" name="dst-type" id="dst-atm" value="atm" data-p="dst.type">Atmosferico</label>
+            <label><input type="radio" name="dst-type" id="dst-pre" value="pre" data-p="dst.type">In pressione</label>
+            <label><input type="radio" name="dst-type" id="dst-free" value="free" data-p="dst.type">Scarico libero</label>
+          </div>
+          <div class="grid">
+            <label class="f" id="w-dst-p"><span>Pressione [bar relativi]</span><input type="number" id="dst-p" data-p="dst.p" step="0.1"></label>
+            <label class="f"><span id="dst-z-lab">Quota pelo libero [m]</span><input type="number" id="dst-z" data-p="dst.z" step="0.1"></label>
+          </div>
+          <p class="hint" id="dst-hint"></p>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="h-segs">
+        <div class="rowbtn" style="justify-content:space-between">
+          <h2 id="h-segs">Tratti della linea, in ordine dal serbatoio di partenza</h2>
+          <div class="rowbtn"><button class="primary" id="btn-add" type="button">Aggiungi tubazione</button><button id="btn-add-valve" type="button">Aggiungi valvola</button></div>
+        </div>
+        <div id="segs" style="display:flex;flex-direction:column;gap:10px"></div>
+        <details id="adv">
+          <summary>Pompa, criteri di verifica e coefficienti dei pezzi speciali</summary>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="grid">
+              <label class="f"><span>Quota asse pompa [m]</span><input type="number" id="pump-z" data-p="pump.z" step="0.1"></label>
+              <label class="f"><span>Rendimento pompa [%]</span><input type="number" id="pump-eta" data-p="pump.eta" step="1" min="1" max="100"></label>
+              <label class="f"><span>Pressione atmosferica [kPa]</span><input type="number" id="patm" data-p="patm" step="0.1" min="50"></label>
+              <label class="f"><span>v max aspirazione [m/s]</span><input type="number" id="crit-vasp" data-p="crit.vAsp" step="0.1" min="0.1"></label>
+              <label class="f"><span>v max mandata [m/s]</span><input type="number" id="crit-vman" data-p="crit.vMan" step="0.1" min="0.1"></label>
+              <label class="f"><span>R max [Pa/m]</span><input type="number" id="crit-rmax" data-p="crit.rMax" step="10" min="10"></label>
+            </div>
+            <p class="hint">Coefficienti ξ dei pezzi speciali (ΔP = ξ · ρ · v² / 2 per ogni pezzo). Valori tipici, modificabili.</p>
+            <div class="grid" id="xi-grid"></div>
+          </div>
+        </details>
+      </section>
+    </div>
+
+    <div class="right">
+      <section class="panel" aria-labelledby="h-schema">
+        <h2 id="h-schema">Schema</h2>
+        <svg id="schema" viewBox="0 0 640 270" role="img" aria-label="Schema della linea con serbatoi, pompa e quote" style="width:100%;height:auto;max-width:100%"></svg>
+      </section>
+      <section class="panel" aria-labelledby="h-res">
+        <h2 id="h-res">Risultati</h2>
+        <div class="key"><span class="lab" id="k-lab"></span><span class="val" id="k-val"></span><span class="alt" id="k-alt"></span></div>
+        <table class="res"><tbody id="res-body"></tbody></table>
+        <ul class="msgs" id="msgs"></ul>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel" aria-labelledby="h-det">
+    <h2 id="h-det">Dettaglio per tratto</h2>
+    <div class="tablewrap"><table class="det" id="det"></table></div>
+    <p class="hint">Attrito con la formula di Swamee-Jain (approssimazione esplicita di Colebrook) in regime turbolento e λ = 64/Re in regime laminare. Per i fluidi non newtoniani (liquami densi, digestato) inserire una viscosità apparente: il risultato è indicativo.</p>
+  </section>
+</div>
+
+<script>
+/* ===================== DATI ===================== */
+var G = 9.80665;
+var FIT = [
+  {k:'c90', n:'Curve 90°', xi:0.5}, {k:'c45', n:'Curve 45°', xi:0.25}, {k:'tee', n:'T / derivazioni', xi:1.0},
+  {k:'val', n:'Valv. intercett.', xi:0.3}, {k:'rit', n:'Valv. ritegno', xi:2.5}, {k:'fil', n:'Filtri a Y', xi:3.0},
+  {k:'rid', n:'Riduzioni', xi:0.4}, {k:'imb', n:'Imbocco serb.', xi:0.5}, {k:'sbo', n:'Sbocco serb.', xi:1.0}
+];
+var KVS = [0.25,0.4,0.63,1,1.6,2.5,4,6.3,10,16,25,40,63,100,160,250,400,630];
+var MAT = [['Acciaio al carbonio',0.046],['Acciaio zincato',0.15],['Acciaio inox',0.015],['PVC / PE',0.007],['Ghisa',0.26]];
+var DN = [['DN15',16.1],['DN20',21.7],['DN25',27.3],['DN32',36.0],['DN40',41.9],['DN50',53.1],['DN65',68.9],['DN80',80.9],
+          ['DN100',105.3],['DN125',129.7],['DN150',155.1],['DN200',206.5]];
+var GLY = { // a circa 10 °C, valori indicativi: [% vol, rho, mu Pa·s]
+  etg:[[0,999.7,0.001307],[20,1035,0.0025],[25,1043,0.0030],[30,1051,0.0036],[35,1059,0.0044],[40,1067,0.0054],[50,1082,0.0083]],
+  pg: [[0,999.7,0.001307],[20,1022,0.0033],[25,1027,0.0042],[30,1032,0.0054],[35,1037,0.0070],[40,1041,0.0091],[50,1049,0.0155]]
+};
+function defaultState(){
+  return { Q:20, patm:101.325,
+    fluid:{type:'acqua', T:15, pct:30, rho:1020, mu:20, pv:2.3},
+    src:{type:'atm', p:0.5, z:2}, dst:{type:'pre', p:1.5, z:8},
+    pump:{z:0, eta:60}, crit:{vAsp:1.0, vMan:1.5, rMax:350},
+    xi:FIT.map(function(f){return f.xi}),
+    segs:[
+      {name:'Aspirazione', side:'asp', mat:0, eps:0.046, dn:'DN100', di:105.3, L:4,  fit:[2,0,0,1,0,1,0,1,0], xiExtra:0, dpExtra:0},
+      {kind:'valve', name:'Valvola di regolazione', side:'man', vtype:'reg', mode:'kv', kv:25, dp:30},
+      {name:'Mandata',     side:'man', mat:0, eps:0.046, dn:'DN65',  di:68.9,  L:45, fit:[6,0,1,2,1,0,1,0,1], xiExtra:0, dpExtra:0}
+    ] };
+}
+
+/* ===================== CALCOLO (funzioni pure) ===================== */
+function waterProps(T){
+  var rho = 1000*(1-(T+288.9414)/(508929.2*(T+68.12963))*Math.pow(T-3.9863,2));
+  var mu = 2.414e-5*Math.pow(10,247.8/(T+133.15));
+  var pv = 0.61121*Math.exp((18.678-T/234.5)*(T/(257.14+T)));
+  return {rho:rho, mu:mu, pv:pv};
+}
+function fluidProps(f){
+  if(f.type==='acqua') return waterProps(Math.min(95,Math.max(0,f.T)));
+  if(f.type==='custom') return {rho:f.rho, mu:f.mu/1000, pv:f.pv};
+  var t=GLY[f.type], p=Math.min(50,Math.max(0,f.pct)), i=0;
+  while(i<t.length-2 && p>=t[i+1][0]) i++;
+  var fr=(p-t[i][0])/(t[i+1][0]-t[i][0]);
+  return {rho:t[i][1]+fr*(t[i+1][1]-t[i][1]), mu:t[i][2]+fr*(t[i+1][2]-t[i][2]), pv:waterProps(10).pv};
+}
+function pipe(Q, di, eps, rho, mu){
+  var d=di/1000, v=(d>0)? Q/3600/(Math.PI/4*d*d) : 0, Re=(mu>0)? rho*v*d/mu : 0, lam=0;
+  if(Re>0) lam = Re<2300 ? 64/Re : 0.25/Math.pow(Math.log10(eps/(3.7*di)+5.74/Math.pow(Re,0.9)),2);
+  return {v:v, Re:Re, lam:lam, R:(d>0? lam/d*rho*v*v/2 : 0)};
+}
+function suggestDN(Q, eps, rho, mu, vmax, rmax){
+  for(var i=0;i<DN.length;i++){ var r=pipe(Q,DN[i][1],eps,rho,mu); if(r.v<=vmax && r.R<=rmax) return DN[i][0]; }
+  return DN[DN.length-1][0];
+}
+function calc(s){
+  var fp=fluidProps(s.fluid), rho=fp.rho, mu=fp.mu, rg=rho*G;
+  var out={rho:rho, mu:mu, pv:fp.pv, segs:[], hfAsp:0, hfMan:0};
+  s.segs.forEach(function(g){
+    if(g.kind==='valve'){
+      var sg=rho/1000, dp, kv;
+      if(g.mode==='dp'){ dp=Math.max(0,g.dp||0)*1000; kv=(dp>0&&s.Q>0)? s.Q/Math.sqrt(dp/1e5/sg) : 0; }
+      else { kv=g.kv||0; dp=kv>0? 1e5*sg*Math.pow(s.Q/kv,2) : 0; }
+      out.segs.push({valve:true, kv:kv, dpd:0, dpc:0, dpx:dp, tot:dp, st:''});
+      if(g.side==='asp') out.hfAsp+=dp; else out.hfMan+=dp;
+      return;
+    }
+    var r=pipe(s.Q,g.di,g.eps,rho,mu), dyn=rho*r.v*r.v/2, sx=g.xiExtra||0;
+    for(var i=0;i<FIT.length;i++) sx+=(g.fit[i]||0)*s.xi[i];
+    var dpd=r.R*(g.L||0), dpc=sx*dyn, dpx=(g.dpExtra||0)*1000, tot=dpd+dpc+dpx;
+    var vmax=g.side==='asp'? s.crit.vAsp : s.crit.vMan;
+    var st = s.Q<=0? '' : r.v>vmax? 'v alta' : r.R>s.crit.rMax? 'R alta' : r.v<0.3? 'v bassa' : 'OK';
+    out.segs.push({v:r.v, Re:r.Re, lam:r.lam, R:r.R, sx:sx, dpd:dpd, dpc:dpc, dpx:dpx, tot:tot, st:st,
+                   sug:suggestDN(s.Q,g.eps,rho,mu,vmax,s.crit.rMax)});
+    if(g.side==='asp') out.hfAsp+=tot; else out.hfMan+=tot;
+  });
+  out.hf=out.hfAsp+out.hfMan;                                   // Pa
+  s.segs.forEach(function(g,i){ if(g.kind!=='valve') return; var r=out.segs[i];
+    r.auth=out.hf>0? r.tot/out.hf : 0;                           // autorita' = ΔPv / (ΔPv + resto del circuito)
+    if(s.Q<=0) r.st='';
+    else if(g.mode!=='dp' && !(g.kv>0)) r.st='Kv mancante';
+    else if(g.vtype==='reg') r.st= r.auth>=0.5? 'OK' : r.auth>=0.25? 'autorità bassa' : 'autorità scarsa';
+    else r.st= r.tot<3000? 'ΔP basso' : 'OK';
+  });
+  var p1=s.patm+(s.src.type==='pre'? s.src.p*100 : 0);           // kPa assoluti
+  var p2=s.patm+(s.dst.type==='pre'? s.dst.p*100 : 0);
+  out.p1=p1; out.p2=p2;
+  out.hGeo=s.dst.z-s.src.z;                                      // m
+  out.hPres=(p2-p1)*1000/rg;                                     // m
+  out.hLoss=out.hf/rg;
+  var last=null; out.segs.forEach(function(r){ if(!r.valve) last=r; });
+  out.hKin=(s.dst.type==='free' && last)? last.v*last.v/(2*G) : 0;
+  out.H=out.hGeo+out.hPres+out.hLoss+out.hKin;                  // m colonna di liquido
+  out.dpPump=out.H*rg/1000;                                      // kPa
+  out.Pidr=Math.max(0,out.H)*rg*s.Q/3600/1000;                   // kW
+  out.Pass=out.Pidr/(Math.max(1,s.pump.eta)/100);
+  out.npsh=(p1-fp.pv)*1000/rg+(s.src.z-s.pump.z)-out.hfAsp/rg;
+  return out;
+}
+
+/* ===================== INTERFACCIA ===================== */
+if(typeof document!=='undefined'){ (function(){
+  var KEY1='perdite-linea-v1', KEY='perdite-linea-v2', NP=5, S, DB;
+  function valid(j){ return !!(j&&j.segs&&j.segs.length&&j.xi&&j.xi.length===FIT.length&&j.fluid&&j.src&&j.dst&&j.pump&&j.crit); }
+  function fresh(i){ var d=defaultState(); d.name='Impianto '+(i+1); return d; }
+  function normPlants(a){ var out=[]; for(var i=0;i<NP;i++){ var x=a&&a[i]; if(valid(x)){ if(!x.name) x.name='Impianto '+(i+1); out.push(x); } else out.push(null); } return out; }
+  function load(){
+    var db=null;
+    try{ var j=JSON.parse(localStorage.getItem(KEY)); if(j&&j.plants) db={active:j.active|0, plants:normPlants(j.plants)}; }catch(e){}
+    if(!db){ db={active:0, plants:normPlants([])}; try{ var o=JSON.parse(localStorage.getItem(KEY1)); if(valid(o)) db.plants[0]=o, o.name='Impianto 1'; }catch(e){} }
+    pick(db); return db;
+  }
+  function pick(db){ if(!db.plants[db.active]){ var k=-1; db.plants.forEach(function(x,i){ if(x&&k<0) k=i; }); if(k<0){ k=0; db.plants[0]=fresh(0); } db.active=k; } }
+  function save(){ try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){} }
+  function renderTabs(){
+    $('tabs').innerHTML=DB.plants.map(function(x,i){
+      return '<button type="button" class="tab'+(i===DB.active?' on':'')+(x?'':' empty')+'" data-tab="'+i+'"'+(i===DB.active?' aria-current="true"':'')+'>'+(x? esc(x.name||('Impianto '+(i+1))) : '+ Nuovo impianto')+'</button>'; }).join('');
+  }
+  function show(){ S=DB.plants[DB.active]; fillStatic(); renderSegs(); renderTabs(); $('plant-name').value=S.name||''; update(); }
+  function exportText(){ return JSON.stringify({app:'perdite-linea', v:2, plants:DB.plants}); }
+  function importText(t){
+    var j; try{ j=JSON.parse(t); }catch(e){ say('Testo non valido: incolla i dati esportati'); return; }
+    var pl=normPlants(j&&j.plants); if(!pl.some(function(x){return x})){ say('Nessun impianto trovato nei dati'); return; }
+    DB={active:0, plants:pl}; pick(DB); show(); say('Impianti importati');
+  }
+  function $(id){return document.getElementById(id)}
+  function num(v){ var x=parseFloat(String(v).replace(',','.')); return isFinite(x)?x:0; }
+  function fmt(x,d){ return isFinite(x)? x.toLocaleString('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}) : '–'; }
+  function esc(t){ return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]}); }
+  function getP(p){ return p.split('.').reduce(function(o,k){return o[k]},S); }
+  function setP(p,v){ var a=p.split('.'), o=S; for(var i=0;i<a.length-1;i++) o=o[a[i]]; o[a[a.length-1]]=v; }
+
+  function fillStatic(){
+    document.querySelectorAll('[data-p]').forEach(function(el){
+      var v=getP(el.dataset.p);
+      if(el.type==='radio') el.checked=(el.value===v); else el.value=v;
+    });
+    $('xi-grid').innerHTML=FIT.map(function(f,i){
+      return '<label class="f"><span>'+esc(f.n)+'</span><input type="number" id="xi-'+i+'" data-xi="'+i+'" step="0.05" min="0" value="'+S.xi[i]+'"></label>'; }).join('');
+    visibility();
+  }
+  function visibility(){
+    var t=S.fluid.type;
+    $('w-T').hidden=(t!=='acqua'); $('w-pct').hidden=!(t==='etg'||t==='pg');
+    $('w-rho').hidden=$('w-mu').hidden=$('w-pv').hidden=(t!=='custom');
+    $('w-src-p').hidden=(S.src.type!=='pre'); $('w-dst-p').hidden=(S.dst.type!=='pre');
+    $('dst-z-lab').textContent=S.dst.type==='free'? 'Quota dello sbocco [m]' : 'Quota pelo libero [m]';
+    $('dst-hint').textContent=S.dst.type==='free'
+      ? 'Sbocco in aria: l\'energia cinetica d\'uscita viene aggiunta in automatico, non contare lo "sbocco in serbatoio".'
+      : 'Ingresso sotto battente: contare uno "sbocco in serbatoio" nell\'ultimo tratto.';
+  }
+  function moveBtns(i){
+    return '<button class="mv" type="button" data-up="'+i+'" aria-label="Sposta su"'+(i===0?' disabled':'')+'>↑</button>'+
+           '<button class="mv" type="button" data-down="'+i+'" aria-label="Sposta giù"'+(i===S.segs.length-1?' disabled':'')+'>↓</button>';
+  }
+  function sideSel(g,i){ return '<select id="s'+i+'-side" data-s="'+i+'" data-k="side" aria-label="Lato pompa"><option value="asp"'+(g.side==='asp'?' selected':'')+'>Aspirazione</option><option value="man"'+(g.side==='man'?' selected':'')+'>Mandata</option></select>'; }
+  function valveTag(i){ var n=0; for(var k=0;k<=i;k++) if(S.segs[k].kind==='valve') n++; return 'V'+n; }
+  function valveHTML(g,i){
+    var reg=g.vtype==='reg', kvm=g.mode!=='dp';
+    return '<div class="seg" data-side="'+g.side+'" data-kind="valve" id="seg-'+i+'">'+
+      '<span class="seg-kind">'+valveTag(i)+' · '+(reg?'Valvola di regolazione':'Valvola di bilanciamento')+'</span>'+
+      '<div class="seg-head"><input type="text" id="s'+i+'-name" data-s="'+i+'" data-k="name" value="'+esc(g.name)+'" aria-label="Nome della valvola">'+sideSel(g,i)+moveBtns(i)+
+      '<button class="ghost" type="button" data-del="'+i+'" aria-label="Elimina valvola"'+(S.segs.length<2?' disabled':'')+'>Elimina</button></div>'+
+      '<div class="grid">'+
+      '<label class="f"><span>Tipo</span><select id="s'+i+'-vt" data-s="'+i+'" data-k="vtype"><option value="reg"'+(reg?' selected':'')+'>Regolazione</option><option value="bil"'+(!reg?' selected':'')+'>Bilanciamento</option></select></label>'+
+      '<label class="f"><span>Dato noto</span><select id="s'+i+'-md" data-s="'+i+'" data-k="mode"><option value="kv"'+(kvm?' selected':'')+'>Kv della valvola</option><option value="dp"'+(!kvm?' selected':'')+'>ΔP da ottenere</option></select></label>'+
+      (kvm? '<label class="f"><span>'+(reg?'Kvs':'Kv di taratura')+' [m³/h]</span><input type="number" id="s'+i+'-kv" data-s="'+i+'" data-k="kv" step="0.1" min="0" value="'+(g.kv||0)+'"></label>'
+           : '<label class="f"><span>ΔP valvola [kPa]</span><input type="number" id="s'+i+'-vdp" data-s="'+i+'" data-k="dp" step="0.5" min="0" value="'+(g.dp||0)+'"></label>')+
+      '</div><p class="hint">'+(reg
+        ? (kvm? 'Kvs = Kv a valvola tutta aperta, dalla scheda tecnica.' : 'Il calcolo restituisce il Kv necessario e i Kvs commerciali più vicini.')
+        : (kvm? 'Kv alla posizione di taratura (dalla tabella del costruttore).' : 'Il calcolo restituisce il Kv di taratura da impostare sulla valvola.'))+
+      '</p><div class="seg-out" id="s'+i+'-out"></div></div>';
+  }
+  function renderSegs(){
+    $('segs').innerHTML=S.segs.map(function(g,i){
+      if(g.kind==='valve') return valveHTML(g,i);
+      var mats=MAT.map(function(m,j){return '<option value="'+j+'"'+(g.mat===j?' selected':'')+'>'+m[0]+'</option>'}).join('')+'<option value="-1"'+(g.mat===-1?' selected':'')+'>Altro</option>';
+      var dns=DN.map(function(d){return '<option'+(g.dn===d[0]?' selected':'')+'>'+d[0]+'</option>'}).join('')+'<option value="altro"'+(g.dn==='altro'?' selected':'')+'>Altro</option>';
+      var fits=FIT.map(function(f,j){return '<label class="f"><span>'+esc(f.n)+'</span><input type="number" id="s'+i+'-f'+j+'" data-s="'+i+'" data-f="'+j+'" min="0" step="1" value="'+(g.fit[j]||0)+'"></label>'}).join('');
+      return '<div class="seg" data-side="'+g.side+'" id="seg-'+i+'"><span class="seg-kind pipe">Tubazione</span>'+
+        '<div class="seg-head"><input type="text" id="s'+i+'-name" data-s="'+i+'" data-k="name" value="'+esc(g.name)+'" aria-label="Nome del tratto">'+
+        sideSel(g,i)+moveBtns(i)+
+        '<button class="ghost" type="button" data-del="'+i+'" aria-label="Elimina tratto"'+(S.segs.length<2?' disabled':'')+'>Elimina</button></div>'+
+        '<div class="grid">'+
+        '<label class="f"><span>Materiale</span><select id="s'+i+'-mat" data-s="'+i+'" data-k="mat">'+mats+'</select></label>'+
+        '<label class="f"><span>Rugosità ε [mm]</span><input type="number" id="s'+i+'-eps" data-s="'+i+'" data-k="eps" step="0.001" min="0" value="'+g.eps+'"></label>'+
+        '<label class="f"><span>Diametro nominale</span><select id="s'+i+'-dn" data-s="'+i+'" data-k="dn">'+dns+'</select></label>'+
+        '<label class="f"><span>Ø interno [mm]</span><input type="number" id="s'+i+'-di" data-s="'+i+'" data-k="di" step="0.1" min="1" value="'+g.di+'"></label>'+
+        '<label class="f"><span>Lunghezza [m]</span><input type="number" id="s'+i+'-L" data-s="'+i+'" data-k="L" step="0.5" min="0" value="'+g.L+'"></label>'+
+        '</div><div class="grid tight">'+fits+
+        '<label class="f"><span>ξ aggiuntivo</span><input type="number" id="s'+i+'-xe" data-s="'+i+'" data-k="xiExtra" step="0.1" min="0" value="'+(g.xiExtra||0)+'"></label>'+
+        '<label class="f"><span>ΔP appar. [kPa]</span><input type="number" id="s'+i+'-dx" data-s="'+i+'" data-k="dpExtra" step="1" min="0" value="'+(g.dpExtra||0)+'"></label>'+
+        '</div><div class="seg-out" id="s'+i+'-out"></div></div>';
+    }).join('');
+  }
+
+  function drawSchema(R){
+    var zs=[S.src.z,S.dst.z,S.pump.z,0], zmin=Math.min.apply(null,zs), zmax=Math.max.apply(null,zs), span=Math.max(zmax-zmin,1);
+    function y(z){ return 205-(z-zmin)/span*120; }
+    var h='', ys=y(S.src.z), yd=y(S.dst.z), yp=y(S.pump.z), y0=y(0);
+    function tank(x,yl,type,title,pBar,z){
+      var top=yl-22, bot=yl+34, t='';
+      t+='<rect x="'+x+'" y="'+yl+'" width="110" height="'+(bot-yl)+'" fill="var(--liquid)"/>';
+      t+='<path d="M'+x+' '+top+' V'+bot+' H'+(x+110)+' V'+top+'" fill="none" stroke="var(--ink)" stroke-width="2"/>';
+      if(type==='pre') t+='<path d="M'+x+' '+top+' Q'+(x+55)+' '+(top-22)+' '+(x+110)+' '+top+'" fill="none" stroke="var(--ink)" stroke-width="2"/>';
+      t+='<line x1="'+x+'" y1="'+yl+'" x2="'+(x+110)+'" y2="'+yl+'" stroke="var(--accent)" stroke-width="1.5"/>';
+      t+='<text class="b" x="'+(x+55)+'" y="'+(top-(type==='pre'?18:8))+'" text-anchor="middle">'+title+'</text>';
+      t+='<text class="m" x="'+(x+55)+'" y="'+(yl-6)+'" text-anchor="middle">'+(type==='pre'? fmt(pBar,2)+' bar' : 'atmosferico')+'</text>';
+      t+='<text x="'+(x+55)+'" y="'+(yl+21)+'" text-anchor="middle">z = '+fmt(z,1)+' m</text>';
+      return t;
+    }
+    h+='<line x1="10" y1="'+y0+'" x2="630" y2="'+y0+'" stroke="var(--line)" stroke-dasharray="4 4"/><text class="m" x="12" y="'+(y0+13)+'">quota 0</text>';
+    var xs=40, xd=490, yso=ys+26, ydi=S.dst.type==='free'? yd : yd+26;
+    h+='<polyline points="'+(xs+110)+','+yso+' 235,'+yso+' 235,'+yp+' 306,'+yp+'" fill="none" stroke="var(--liquid)" stroke-width="5"/>';
+    h+='<polyline points="334,'+yp+' 405,'+yp+' 405,'+ydi+' '+(S.dst.type==='free'? xd+30 : xd)+','+ydi+'" fill="none" stroke="var(--accent)" stroke-width="5"/>';
+    // --- valvole: tutte, nell'ordine della linea, distribuite lungo il tracciato del loro lato
+    function poly(pts){ var seg=[], L=0; for(var k=0;k<pts.length-1;k++){ var a=pts[k], b=pts[k+1], l=Math.abs(b[0]-a[0])+Math.abs(b[1]-a[1]); seg.push({a:a,b:b,l:l,L0:L}); L+=l; } return {seg:seg, L:L}; }
+    function at(P,d){ for(var k=0;k<P.seg.length;k++){ var q=P.seg[k]; if(d<=q.L0+q.l||k===P.seg.length-1){ var f=q.l>0?(d-q.L0)/q.l:0;
+        return {x:q.a[0]+(q.b[0]-q.a[0])*f, y:q.a[1]+(q.b[1]-q.a[1])*f, v:q.a[0]===q.b[0]&&q.l>0}; } } }
+    function vsym(p,reg,tag,sc){
+      var t='<g transform="translate('+p.x+','+p.y+') rotate('+(p.v?-90:0)+') scale('+sc+')">'+
+        '<path d="M-9 -7 L9 7 L9 -7 L-9 7 Z" fill="var(--surface)" stroke="var(--valve)" stroke-width="2"/>';
+      if(reg) t+='<line x1="0" y1="0" x2="0" y2="-15" stroke="var(--valve)" stroke-width="2"/><rect x="-6" y="-21" width="12" height="6" fill="var(--valve)"/>';
+      else t+='<path d="M-11 9 L11 -9 M5 -9 L11 -9 L11 -3" fill="none" stroke="var(--valve)" stroke-width="1.6"/>';
+      t+='</g>';
+      t+= p.v ? '<text x="'+(p.x+13*sc)+'" y="'+(p.y+4)+'" style="fill:var(--valve);font-weight:600;font-size:10px">'+tag+'</text>'
+              : '<text x="'+p.x+'" y="'+(p.y+12+9*sc)+'" text-anchor="middle" style="fill:var(--valve);font-weight:600;font-size:10px">'+tag+'</text>';
+      return t;
+    }
+    var vtag={}, nv=0; S.segs.forEach(function(g,i){ if(g.kind==='valve') vtag[i]='V'+(++nv); });
+    function placeSide(side,P,m0,m1){
+      var items=[], vals=[]; S.segs.forEach(function(g,i){ if(g.side===side){ items.push(i); if(g.kind==='valve') vals.push({i:i,k:items.length-1}); } });
+      if(!vals.length) return '';
+      // tratti utili: ogni tubo del tracciato meno 14 px attorno alle curve e i margini agli estremi
+      var iv=[], U=0, C=14, last=P.seg.length-1;
+      P.seg.forEach(function(q,k){ var s0=q.L0+(k===0?m0:C), s1=q.L0+q.l-(k===last?m1:C); if(s1-s0>4){ iv.push([s0,s1,U]); U+=s1-s0; } });
+      function map(u){ for(var k=0;k<iv.length;k++){ var w=iv[k][1]-iv[k][0]; if(u<=iv[k][2]+w||k===iv.length-1) return iv[k][0]+Math.min(w,Math.max(0,u-iv[k][2])); } }
+      var n=items.length, pos=vals.map(function(v){ return U*(v.k+0.5)/n; }), gap=Infinity;
+      for(var k=1;k<pos.length;k++) gap=Math.min(gap,pos[k]-pos[k-1]);
+      if(gap<26){ pos=vals.map(function(v,j){ return U*(j+0.5)/vals.length; }); gap=U/vals.length; }
+      var sc=Math.max(0.5,Math.min(1,gap/26)), t='';
+      vals.forEach(function(v,j){ var g=S.segs[v.i]; t+=vsym(at(P,map(pos[j])),g.vtype==='reg',vtag[v.i],sc); });
+      return t;
+    }
+    var xEnd=S.dst.type==='free'? xd+30 : xd;
+    h+=placeSide('asp',poly([[xs+110,yso],[235,yso],[235,yp],[306,yp]]),12,22);
+    h+=placeSide('man',poly([[334,yp],[405,yp],[405,ydi],[xEnd,ydi]]),22,12);
+    h+=tank(xs,ys,S.src.type,'Partenza',S.src.p,S.src.z);
+    if(S.dst.type==='free'){
+      h+='<path d="M'+(xd+30)+' '+ydi+' v16 m-6 -7 l6 9 l6 -9" fill="none" stroke="var(--accent)" stroke-width="2.5"/>';
+      h+='<text class="b" x="'+(xd+60)+'" y="'+(ydi-10)+'" text-anchor="middle">Scarico libero</text><text x="'+(xd+60)+'" y="'+(ydi+36)+'" text-anchor="middle">z = '+fmt(S.dst.z,1)+' m</text>';
+    } else h+=tank(xd,yd,S.dst.type,'Arrivo',S.dst.p,S.dst.z);
+    if(R.H>0.005){
+      h+='<circle cx="320" cy="'+yp+'" r="14" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/><path d="M313 '+(yp-8)+' L329 '+yp+' L313 '+(yp+8)+' Z" fill="var(--accent)"/>';
+      h+='<text class="b" x="320" y="'+(yp+32)+'" text-anchor="middle">Pompa</text><text class="m" x="320" y="'+(yp+46)+'" text-anchor="middle">H = '+fmt(R.H,1)+' m</text>';
+    } else {
+      h+='<line x1="306" y1="'+yp+'" x2="334" y2="'+yp+'" stroke="var(--accent)" stroke-width="5"/><text class="m" x="320" y="'+(yp+22)+'" text-anchor="middle">senza pompa</text>';
+    }
+    h+='<text class="m" x="250" y="'+(Math.min(yso,yp)-27)+'" text-anchor="middle">'+fmt(R.hfAsp/1000,1)+' kPa</text>';
+    h+='<text class="m" x="405" y="'+(Math.min(ydi,yp)-27)+'" text-anchor="middle">'+fmt(R.hfMan/1000,1)+' kPa</text>';
+    $('schema').innerHTML=h;
+  }
+
+  var lastText='', lastR=null;
+  function update(){
+    var R=calc(S), rg=R.rho*G; lastR=R;
+    $('props').innerHTML='<span>ρ <b>'+fmt(R.rho,1)+'</b> kg/m³</span><span>μ <b>'+fmt(R.mu*1000,2)+'</b> mPa·s</span><span>p<sub>v</sub> <b>'+fmt(R.pv,2)+'</b> kPa</span>'+
+      (S.fluid.type==='etg'||S.fluid.type==='pg'? '<span>valori indicativi a circa 10 °C</span>':'');
+    var excess=(R.H<-0.005 && S.Q>0)? -R.H*rg : 0;
+    S.segs.forEach(function(g,i){
+      var r=R.segs[i], cls=r.st==='OK'?'ok':((r.st==='v alta'||r.st==='autorità scarsa'||r.st==='Kv mancante')?'crit':'warn'), sug='';
+      if(g.kind==='valve'){
+        var o='<span>ΔP <b>'+fmt(r.tot/1000,2)+'</b> kPa</span>';
+        if(g.mode==='dp'){
+          o+='<span>Kv '+(g.vtype==='reg'?'necessario':'di taratura')+' <b>'+fmt(r.kv,2)+'</b> m³/h</span>';
+          if(g.vtype==='reg' && r.kv>0){ var lo=null, hi=null; KVS.forEach(function(k){ if(k<=r.kv) lo=k; if(k>=r.kv&&hi===null) hi=k; });
+            o+='<span>Kvs commerciali: <b>'+(lo!==null?fmt(lo,2):'–')+'</b> / <b>'+(hi!==null?fmt(hi,2):'–')+'</b></span>'; }
+        } else o+='<span>Kv <b>'+fmt(r.kv,2)+'</b> m³/h</span>';
+        if(g.vtype==='reg') o+='<span>autorità <b>'+fmt(r.auth,2)+'</b></span>';
+        if(r.st) o+='<span class="chip '+cls+'">'+r.st+'</span>';
+        if(excess>0) o+='<button class="linkbtn" type="button" data-fix="'+i+'">dimensiona per dissipare l\'eccesso ('+fmt(excess/1000,1)+' kPa)</button>';
+        $('s'+i+'-out').innerHTML=o; return;
+      }
+      if(S.Q>0 && r.sug!==g.dn) sug='<button class="linkbtn" type="button" data-sug="'+i+'" data-dn="'+r.sug+'">usa '+r.sug+' consigliato</button>';
+      $('s'+i+'-out').innerHTML='<span>v <b>'+fmt(r.v,2)+'</b> m/s</span><span>R <b>'+fmt(r.R,0)+'</b> Pa/m</span><span>Σξ <b>'+fmt(r.sx,1)+'</b></span><span>ΔP <b>'+fmt(r.tot/1000,2)+'</b> kPa</span>'+
+        (r.st? '<span class="chip '+cls+'">'+r.st+'</span>':'')+sug;
+    });
+    var need=R.H>0.005;
+    $('k-lab').textContent=need? 'Prevalenza richiesta alla pompa' : 'Carico disponibile in eccesso (nessuna pompa necessaria)';
+    $('k-val').innerHTML=fmt(Math.abs(R.H),2)+' <small>m di colonna di liquido</small>';
+    $('k-alt').textContent=fmt(Math.abs(R.dpPump),1)+' kPa  ·  '+fmt(Math.abs(R.dpPump)/100,2)+' bar  ·  portata '+fmt(S.Q,1)+' m³/h ('+fmt(S.Q/3.6,2)+' L/s)';
+    function row(a,b,c){ return '<tr'+(c?' class="'+c+'"':'')+'><td>'+a+'</td><td>'+b+'</td></tr>'; }
+    function mk(m){ return fmt(m,2)+' m <small>('+fmt(m*rg/1000,1)+' kPa)</small>'; }
+    var b='';
+    b+=row('Perdite in aspirazione',mk(R.hfAsp/rg));
+    b+=row('Perdite in mandata',mk(R.hfMan/rg));
+    b+=row('Dislivello arrivo − partenza',mk(R.hGeo));
+    b+=row('Differenza di pressione arrivo − partenza',mk(R.hPres));
+    if(S.dst.type==='free') b+=row('Energia cinetica allo sbocco',mk(R.hKin));
+    b+=row(need?'Prevalenza richiesta':'Bilancio (negativo = carico in eccesso)',mk(R.H),'sum');
+    if(need){
+      b+=row('Potenza idraulica',fmt(R.Pidr,2)+' kW');
+      b+=row('Potenza assorbita <small>(rendimento '+fmt(S.pump.eta,0)+' %)</small>',fmt(R.Pass,2)+' kW');
+      b+=row('NPSH disponibile',fmt(R.npsh,2)+' m');
+    }
+    $('res-body').innerHTML=b;
+    var m=[];
+    if(S.Q<=0) m.push(['warn','Inserire una portata maggiore di zero.']);
+    if(!need && S.Q>0) m.push(['ok','Il fluido arriva a destinazione senza pompa. Il carico in eccesso va dissipato con una valvola di regolazione, altrimenti la portata reale sarà maggiore di quella inserita.']);
+    if(need){
+      if(R.npsh<=0) m.push(['crit','NPSH disponibile nullo o negativo: la pompa cavita. Alzare il livello o la pressione del serbatoio, abbassare la pompa o ridurre le perdite in aspirazione.']);
+      else if(R.npsh<3) m.push(['warn','NPSH disponibile basso: verificare che superi l\'NPSH richiesto dalla pompa con almeno 0,5–1 m di margine.']);
+      else m.push(['ok','Confrontare l\'NPSH disponibile con quello richiesto dalla pompa scelta (margine di almeno 0,5–1 m).']);
+    }
+    var bad=R.segs.filter(function(r){return r.st==='v alta'||r.st==='R alta'}).length;
+    if(bad) m.push(['warn',bad+(bad===1?' tratto supera':' tratti superano')+' i limiti di velocità o di perdita specifica: valutare un diametro maggiore.']);
+    if(R.segs.some(function(r){return r.Re>0&&r.Re<2300})) m.push(['warn','Regime laminare in almeno un tratto: le perdite concentrate calcolate con ξ sono sottostimate.']);
+    var vbad=R.segs.filter(function(r){return r.valve && r.st && r.st!=='OK'}).length;
+    if(vbad) m.push(['warn',vbad===1? 'Una valvola richiede attenzione: autorità di regolazione consigliata almeno 0,5; ΔP minimo di misura per il bilanciamento circa 3 kPa.'
+                                    : vbad+' valvole richiedono attenzione: autorità di regolazione consigliata almeno 0,5; ΔP minimo di misura per il bilanciamento circa 3 kPa.']);
+    if(S.segs.some(function(g){return g.kind==='valve'&&g.side==='asp'&&g.vtype==='reg'})) m.push(['warn','Valvola di regolazione in aspirazione: riduce l\'NPSH disponibile e favorisce la cavitazione. Meglio installarla in mandata.']);
+    var lp=null; S.segs.forEach(function(g){ if(g.kind!=='valve') lp=g; });
+    if(S.dst.type!=='free' && lp && !(lp.fit[8]>0)) m.push(['warn','Nell\'ultimo tratto non è contato lo sbocco nel serbatoio di arrivo.']);
+    $('msgs').innerHTML=m.map(function(x){return '<li class="'+x[0]+'">'+x[1]+'</li>'}).join('');
+    var t='<thead><tr><th>Tratto</th><th>Lato</th><th>Ø int. [mm]</th><th>L [m]</th><th>v [m/s]</th><th>Re</th><th>λ</th><th>R [Pa/m]</th><th>Σξ</th><th>ΔP distr. [kPa]</th><th>ΔP conc. [kPa]</th><th>ΔP appar./valv. [kPa]</th><th>ΔP tot. [kPa]</th></tr></thead><tbody>';
+    S.segs.forEach(function(g,i){ var r=R.segs[i];
+      if(g.kind==='valve'){ t+='<tr><td>'+valveTag(i)+' · '+esc(g.name)+'</td><td>'+(g.side==='asp'?'asp.':'mand.')+'</td><td colspan="7" style="text-align:left;font-family:var(--sans)">'+
+        (g.vtype==='reg'?'Valvola di regolazione':'Valvola di bilanciamento')+' · Kv '+fmt(r.kv,2)+' m³/h'+(g.vtype==='reg'?' · autorità '+fmt(r.auth,2):'')+
+        '</td><td>–</td><td>–</td><td>'+fmt(r.dpx/1000,2)+'</td><td>'+fmt(r.tot/1000,2)+'</td></tr>'; return; }
+      t+='<tr><td>'+esc(g.name)+'</td><td>'+(g.side==='asp'?'asp.':'mand.')+'</td><td>'+fmt(g.di,1)+'</td><td>'+fmt(g.L,1)+'</td><td>'+fmt(r.v,2)+'</td><td>'+fmt(r.Re,0)+'</td><td>'+fmt(r.lam,4)+'</td><td>'+fmt(r.R,0)+'</td><td>'+fmt(r.sx,1)+'</td><td>'+fmt(r.dpd/1000,2)+'</td><td>'+fmt(r.dpc/1000,2)+'</td><td>'+fmt(r.dpx/1000,2)+'</td><td>'+fmt(r.tot/1000,2)+'</td></tr>'; });
+    t+='</tbody><tfoot><tr><td colspan="12">Totale perdite della linea</td><td>'+fmt(R.hf/1000,2)+'</td></tr></tfoot>';
+    $('det').innerHTML=t;
+    drawSchema(R);
+    lastText='PERDITE DI CARICO - '+(S.name||'')+'\nFluido: ρ '+fmt(R.rho,1)+' kg/m³, μ '+fmt(R.mu*1000,2)+' mPa·s\nPortata: '+fmt(S.Q,2)+' m³/h\n'+
+      'Partenza: '+(S.src.type==='pre'?fmt(S.src.p,2)+' bar rel.':'atmosferico')+', quota '+fmt(S.src.z,2)+' m\n'+
+      'Arrivo: '+(S.dst.type==='pre'?fmt(S.dst.p,2)+' bar rel.':S.dst.type==='free'?'scarico libero':'atmosferico')+', quota '+fmt(S.dst.z,2)+' m\n'+
+      S.segs.map(function(g,i){var r=R.segs[i];
+        if(g.kind==='valve') return '- '+valveTag(i)+' '+g.name+' ('+(g.vtype==='reg'?'regolazione':'bilanciamento')+', '+(g.side==='asp'?'aspirazione':'mandata')+'): Kv '+fmt(r.kv,2)+' m³/h, ΔP '+fmt(r.tot/1000,2)+' kPa'+(g.vtype==='reg'?', autorità '+fmt(r.auth,2):'');
+        return '- '+g.name+' ('+(g.side==='asp'?'aspirazione':'mandata')+'): Ø int. '+fmt(g.di,1)+' mm, L '+fmt(g.L,1)+' m, v '+fmt(r.v,2)+' m/s, ΔP '+fmt(r.tot/1000,2)+' kPa'}).join('\n')+
+      '\nPerdite totali: '+fmt(R.hf/1000,2)+' kPa\n'+(need?'Prevalenza richiesta: '+fmt(R.H,2)+' m ('+fmt(R.dpPump,1)+' kPa)\nPotenza assorbita: '+fmt(R.Pass,2)+' kW\nNPSH disponibile: '+fmt(R.npsh,2)+' m'
+        :'Nessuna pompa necessaria, carico in eccesso: '+fmt(-R.H,2)+' m');
+    save();
+  }
+
+  document.addEventListener('input',onEdit); document.addEventListener('change',onEdit);
+  function onEdit(e){
+    var el=e.target, d=el.dataset; if(!d) return;
+    if(e.type==='change' && el.tagName==='INPUT' && (el.type==='number'||el.type==='text')) return;  // gia' gestito da 'input'
+    if(el.id==='plant-name'){ S.name=el.value; renderTabs(); save(); return; }
+    if(el.id==='imp-file'){ var f=el.files&&el.files[0]; if(f){ var fr=new FileReader(); fr.onload=function(){ $('xfer-text').value=String(fr.result); importText(String(fr.result)); }; fr.readAsText(f); } return; }
+    if(d.p){
+      if(el.type==='radio'){ if(!el.checked) return; setP(d.p,el.value); }
+      else setP(d.p, el.tagName==='SELECT'? el.value : num(el.value));
+      visibility();
+    } else if(d.xi!==undefined){ S.xi[+d.xi]=num(el.value); }
+    else if(d.s!==undefined){
+      var g=S.segs[+d.s], i=+d.s;
+      if(d.f!==undefined) g.fit[+d.f]=num(el.value);
+      else if(d.k==='name') g.name=el.value;
+      else if(d.k==='vtype'||d.k==='mode'){ g[d.k]=el.value; renderSegs(); }
+      else if(d.k==='side'){ g.side=el.value; $('seg-'+i).dataset.side=el.value; }
+      else if(d.k==='mat'){ g.mat=+el.value; if(g.mat>=0){ g.eps=MAT[g.mat][1]; $('s'+i+'-eps').value=g.eps; } }
+      else if(d.k==='dn'){ g.dn=el.value; var f=DN.filter(function(x){return x[0]===g.dn})[0]; if(f){ g.di=f[1]; $('s'+i+'-di').value=g.di; } }
+      else if(d.k==='di'){ g.di=num(el.value); var m=DN.filter(function(x){return Math.abs(x[1]-g.di)<0.05})[0]; g.dn=m?m[0]:'altro'; $('s'+i+'-dn').value=g.dn; }
+      else if(d.k==='eps'){ g.eps=num(el.value); var mm=-1; MAT.forEach(function(x,j){ if(Math.abs(x[1]-g.eps)<1e-9 && (mm<0||j===g.mat)) mm=j; }); g.mat=mm; $('s'+i+'-mat').value=mm; }
+      else g[d.k]=num(el.value);
+    } else return;
+    update();
+  }
+  document.addEventListener('click',function(e){
+    var el=e.target, d=el.dataset||{};
+    if(d.del!==undefined){ if(S.segs.length>1){ S.segs.splice(+d.del,1); renderSegs(); update(); } }
+    else if(d.sug!==undefined){ var g=S.segs[+d.sug]; g.dn=d.dn; g.di=DN.filter(function(x){return x[0]===d.dn})[0][1]; renderSegs(); update(); }
+    else if(d.up!==undefined||d.down!==undefined){ var a=+(d.up!==undefined?d.up:d.down), b2=a+(d.up!==undefined?-1:1);
+      if(b2>=0&&b2<S.segs.length){ var tmp=S.segs[a]; S.segs[a]=S.segs[b2]; S.segs[b2]=tmp; renderSegs(); update(); } }
+    else if(d.fix!==undefined && lastR){ var gv=S.segs[+d.fix], ex=-lastR.H*lastR.rho*G;
+      if(ex>0){ gv.mode='dp'; gv.dp=Math.round((lastR.segs[+d.fix].tot+ex)/100)/10; renderSegs(); update(); say('Valvola dimensionata'); } }
+    else if(el.id==='btn-add-valve'){
+      S.segs.push({kind:'valve', name:'Valvola '+(S.segs.filter(function(x){return x.kind==='valve'}).length+1), side:'man', vtype:'bil', mode:'kv', kv:16, dp:10}); renderSegs(); update(); }
+    else if(el.id==='btn-add'){ var l=null; S.segs.forEach(function(x){ if(x.kind!=='valve') l=x; }); l=l||defaultState().segs[2];
+      S.segs.push({name:'Tratto '+(S.segs.length+1), side:'man', mat:l.mat, eps:l.eps, dn:l.dn, di:l.di, L:10, fit:FIT.map(function(){return 0}), xiExtra:0, dpExtra:0}); renderSegs(); update(); }
+    else if(d.tab!==undefined){ var k=+d.tab; if(!DB.plants[k]) DB.plants[k]=fresh(k); DB.active=k; disarm(); show(); }
+    else if(el.id==='btn-reset'){ var nm=S.name; S=DB.plants[DB.active]=defaultState(); S.name=nm; show(); say('Esempio ripristinato'); }
+    else if(el.id==='btn-del'){
+      if(!el.classList.contains('armed')){ el.classList.add('armed'); el.textContent='Conferma eliminazione'; clearTimeout(armT); armT=setTimeout(disarm,4000); }
+      else { DB.plants[DB.active]=null; disarm(); pick(DB); show(); say('Impianto eliminato'); }
+    }
+    else if(el.id==='btn-exp'){ var ta=$('xfer-text'); ta.value=exportText(); ta.focus(); ta.select();
+      try{ navigator.clipboard.writeText(ta.value).then(function(){ say('Dati copiati negli appunti'); },function(){ say('Testo pronto: copialo dal riquadro'); }); }catch(err){ say('Testo pronto: copialo dal riquadro'); } }
+    else if(el.id==='btn-dl'){ try{ var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([exportText()],{type:'application/json'})); a.download='impianti_perdite_di_carico.json'; document.body.appendChild(a); a.click(); a.remove(); }catch(err){} }
+    else if(el.id==='btn-imp'){ importText($('xfer-text').value); }
+    else if(el.id==='btn-copy'){
+      var done=function(){ say('Risultati copiati'); }, fail=function(){ say('Copia non riuscita in questa finestra'); };
+      try{ navigator.clipboard.writeText(lastText).then(done,fail); }catch(err){ fail(); }
+    }
+  });
+  var armT; function disarm(){ clearTimeout(armT); var b=$('btn-del'); b.classList.remove('armed'); b.textContent='Elimina impianto'; }
+  var tmr; function say(t){ $('status').textContent=t; clearTimeout(tmr); tmr=setTimeout(function(){ $('status').textContent=''; },2500); }
+
+  function start(){ DB=load(); show(); }
+  start();
+})(); }
+</script>
+
+</body>
+</html>
